@@ -23,7 +23,8 @@ const card = p => `
 
 // Cập nhật số lượng trên biểu tượng giỏ hàng
 const badge = () => $('#cart-count').text(cart().reduce((s, i) => s + i.qty, 0));
-
+// Hiện thông báo nhỏ ở góc màn hình trong gần 2 giây
+const toast = t => $('#msg').stop(true, true).text(t).fadeIn(150).delay(1800).fadeOut(300);
 
 // ===== PHẦN 2: Header và footer dùng chung =====
 function layout() {
@@ -56,7 +57,7 @@ function layout() {
       <p class="mb-1">Đồ thể thao cho bóng đá, chạy bộ, cầu lông và gym.</p>
       <small>Đổi trả trong 7 ngày nếu sai size. Hotline 0123 456 789.</small>
     </div>`);
-
+  $('body').append('<div id="msg" class="toast-msg"></div>');
   badge();
 }
 
@@ -172,10 +173,107 @@ function productsPage() {
   $('#f').on('input change', draw).on('submit', e => e.preventDefault());
   draw();   // vẽ lần đầu
 }
+// ===== PHẦN 5: Trang chi tiết =====
+function detailPage() {
+  // Lấy id trên địa chỉ: detail.html?id=3
+  const id = new URLSearchParams(location.search).get('id');
+  const p = products().find(x => x.id == id);   // dùng == vì id trên địa chỉ là chuỗi, id sản phẩm là số
+
+  if (!p) {
+    $('#app').html('<p>Không tìm thấy sản phẩm. <a href="products.html">Xem danh mục</a></p>');
+    return;
+  }
+
+  // Sản phẩm chỉ có 1 size (như Free size) thì chọn sẵn
+  let size = p.sizes.length === 1 ? p.sizes[0] : null;
+
+  const chart = [
+    ['S',   '1m55–1m64', '50–57kg'],
+    ['M',   '1m60–1m69', '58–65kg'],
+    ['L',   '1m68–1m75', '66–73kg'],
+    ['XL',  '1m72–1m80', '74–82kg'],
+    ['XXL', 'Từ 1m78',   '83–95kg']
+  ];
+  const isClothes = p.sizes.includes('M');   // chỉ quần áo mới có bảng size
+
+  $('#app').html(`
+    <div class="row g-4">
+      <div class="col-md-5">${pic(p)}</div>
+      <div class="col-md-7">
+        <small class="text-muted">${CAT(p.cat).name}</small>
+        <h1>${esc(p.name)}</h1>
+        <p class="h3 price">${money(p.price)}</p>
+        <p>${esc(p.desc)}</p>
+        <p><b>Chất liệu:</b> ${esc(p.material)}</p>
+
+        <div id="sz" class="mb-2">
+          <b>Kích cỡ:</b>
+          ${p.sizes.map(s => `<button type="button" class="btn btn-outline-dark size-btn ms-1 ${s === size ? 'on' : ''}">${s}</button>`).join('')}
+        </div>
+        <p>
+          <small id="warn" class="text-danger d-none">Vui lòng chọn kích cỡ trước khi mua!</small>
+          ${isClothes ? '<a href="#" data-bs-toggle="modal" data-bs-target="#sizeModal">Hướng dẫn đo size</a>' : ''}
+        </p>
+
+        <div class="input-group mb-3" style="max-width:140px">
+          <button class="btn btn-outline-dark" id="m">−</button>
+          <input id="qty" class="form-control text-center" value="1">
+          <button class="btn btn-outline-dark" id="a">+</button>
+        </div>
+        <button id="add" class="btn btn-main btn-lg">Thêm vào giỏ hàng</button>
+      </div>
+    </div>
+
+    <div class="modal fade" id="sizeModal">
+      <div class="modal-dialog"><div class="modal-content">
+        <div class="modal-header">
+          <h2 class="h5 modal-title">Bảng chọn size quần áo</h2>
+          <button class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <table class="table">
+            <tr><th>Size</th><th>Chiều cao</th><th>Cân nặng</th></tr>
+            ${chart.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join('')}</tr>`).join('')}
+          </table>
+        </div>
+      </div></div>
+    </div>`);
+
+  // Bấm một nút size: bỏ chọn nút cũ, chọn nút mới, tắt cảnh báo
+  $('#sz').on('click', '.size-btn', function () {
+    $('.size-btn').removeClass('on');
+    $(this).addClass('on');
+    size = $(this).text();
+    $('#warn').addClass('d-none');
+    $('#sz').removeClass('is-warn');
+  });
+
+  // Số lượng: luôn là số nguyên từ 1 trở lên
+  const qn = () => Math.max(1, parseInt($('#qty').val()) || 1);
+  $('#m').click(() => $('#qty').val(Math.max(1, qn() - 1)));
+  $('#a').click(() => $('#qty').val(qn() + 1));
+
+  // Thêm vào giỏ hàng
+  $('#add').click(() => {
+    if (!size) {                       // chưa chọn size thì báo và dừng
+      $('#warn').removeClass('d-none');
+      $('#sz').addClass('is-warn');
+      return;
+    }
+    const c = cart();
+    const item = c.find(i => i.id === p.id && i.size === size);
+    if (item) item.qty += qn();                      // đã có cùng sản phẩm, cùng size: cộng thêm
+    else c.push({ id: p.id, size, qty: qn() });      // chưa có: thêm dòng mới
+    localStorage.setItem('cart', JSON.stringify(c));
+    badge();
+    toast('Đã thêm vào giỏ hàng');
+  });
+}
 // ===== Khởi chạy =====
 $(function () {
   layout();
   const page = document.body.dataset.page;
   if (page === 'home') home();
   if (page === 'products') productsPage();
+  if (page === 'detail') detailPage();
 });
