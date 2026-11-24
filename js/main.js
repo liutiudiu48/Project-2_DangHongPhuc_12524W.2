@@ -23,6 +23,15 @@ const card = p => `
 
 // Cập nhật số lượng trên biểu tượng giỏ hàng
 const badge = () => $('#cart-count').text(cart().reduce((s, i) => s + i.qty, 0));
+// Ghép dữ liệu giỏ hàng với thông tin sản phẩm (tên, giá lấy từ PRODUCTS)
+// k = vị trí của dòng trong giỏ, dùng để biết đang sửa dòng nào
+const lines = () => cart()
+  .map((i, k) => ({ ...i, k, p: products().find(x => x.id === i.id) }))
+  .filter(l => l.p);   // bỏ dòng mà sản phẩm không còn tồn tại
+
+// Tổng tiền cả giỏ
+const total = () => lines().reduce((s, l) => s + l.p.price * l.qty, 0);
+
 // Hiện thông báo nhỏ ở góc màn hình trong gần 2 giây
 const toast = t => $('#msg').stop(true, true).text(t).fadeIn(150).delay(1800).fadeOut(300);
 
@@ -269,6 +278,65 @@ function detailPage() {
     toast('Đã thêm vào giỏ hàng');
   });
 }
+// ===== PHẦN 6: Trang giỏ hàng =====
+function cartPage() {
+  // Vẽ lại toàn bộ giỏ hàng; gọi mỗi khi giỏ thay đổi
+  const draw = () => {
+    const L = lines();
+
+    // Giỏ trống: báo và gợi ý đi mua hàng
+    if (!L.length) {
+      $('#app').html('<h1>Giỏ hàng</h1><p>Giỏ hàng đang trống. <a href="products.html">Chọn sản phẩm</a></p>');
+      badge();
+      return;
+    }
+
+    $('#app').html(`
+      <h1>Giỏ hàng</h1>
+      <div class="table-responsive">
+        <table class="table align-middle">
+          <thead>
+            <tr><th>Sản phẩm</th><th>Size</th><th>Đơn giá</th><th>Số lượng</th><th>Thành tiền</th><th></th></tr>
+          </thead>
+          <tbody>
+            ${L.map(l => `
+              <tr>
+                <td>${l.p.icon} ${esc(l.p.name)}</td>
+                <td>${l.size}</td>
+                <td>${money(l.p.price)}</td>
+                <td>
+                  <button class="btn btn-sm btn-outline-dark dec" data-k="${l.k}">−</button>
+                  <b class="mx-2">${l.qty}</b>
+                  <button class="btn btn-sm btn-outline-dark inc" data-k="${l.k}">+</button>
+                </td>
+                <td>${money(l.p.price * l.qty)}</td>
+                <td><button class="btn btn-sm btn-outline-danger del" data-k="${l.k}">Xóa</button></td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+      <p class="h4 text-end">Tổng: <span class="price">${money(total())}</span></p>
+      <div class="text-end"><a href="checkout.html" class="btn btn-main btn-lg">Đặt hàng</a></div>`);
+    badge();
+  };
+
+  // Bấm +, − hoặc Xóa: sửa giỏ rồi vẽ lại
+  $('#app').on('click', '.inc, .dec, .del', function () {
+    const c = cart();
+    const k = +$(this).data('k');                    // vị trí dòng cần sửa
+
+    if ($(this).hasClass('del')) c.splice(k, 1);     // xóa dòng
+    else {
+      c[k].qty += $(this).hasClass('inc') ? 1 : -1;  // tăng hoặc giảm 1
+      if (c[k].qty < 1) c.splice(k, 1);              // giảm xuống 0 thì xóa dòng
+    }
+
+    localStorage.setItem('cart', JSON.stringify(c));
+    draw();
+  });
+
+  draw();   // vẽ lần đầu
+}
 // ===== Khởi chạy =====
 $(function () {
   layout();
@@ -276,4 +344,5 @@ $(function () {
   if (page === 'home') home();
   if (page === 'products') productsPage();
   if (page === 'detail') detailPage();
+  if (page === 'cart') cartPage();
 });
