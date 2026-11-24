@@ -337,6 +337,104 @@ function cartPage() {
 
   draw();   // vẽ lần đầu
 }
+// ===== PHẦN 7: Trang đặt hàng =====
+function checkoutPage() {
+  const L = lines();
+
+  // Giỏ trống thì chưa thể đặt hàng
+  if (!L.length) {
+    $('#app').html('<h1>Đặt hàng</h1><p>Giỏ hàng trống nên chưa thể đặt hàng. <a href="products.html">Chọn sản phẩm</a></p>');
+    return;
+  }
+
+  $('#app').html(`
+    <h1>Đặt hàng</h1>
+    <div class="row g-4">
+      <form id="of" class="col-md-7" novalidate>
+        <div class="mb-3">
+          <label class="form-label">Họ tên</label>
+          <input id="n" class="form-control">
+          <div class="invalid-feedback">Nhập họ tên (ít nhất 2 ký tự).</div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Số điện thoại</label>
+          <input id="t" class="form-control">
+          <div class="invalid-feedback">Số điện thoại gồm 10 chữ số, bắt đầu bằng 0.</div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Địa chỉ giao hàng</label>
+          <input id="d" class="form-control">
+          <div class="invalid-feedback">Nhập địa chỉ nhận hàng đầy đủ.</div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Ghi chú</label>
+          <textarea id="g" class="form-control"></textarea>
+        </div>
+        <div class="mb-3">
+          <label class="form-check"><input type="radio" class="form-check-input" name="pay" value="COD" checked> Thanh toán khi nhận hàng (COD)</label>
+          <label class="form-check"><input type="radio" class="form-check-input" name="pay" value="Chuyển khoản"> Chuyển khoản</label>
+        </div>
+        <button class="btn btn-main btn-lg">Đặt hàng</button>
+      </form>
+
+      <aside class="col-md-5">
+        <div class="card p-3">
+          <h2 class="h5">Đơn hàng của bạn</h2>
+          ${L.map(l => `
+            <div class="d-flex justify-content-between">
+              <span>${esc(l.p.name)} (${l.size}) ×${l.qty}</span>
+              <span>${money(l.p.price * l.qty)}</span>
+            </div>`).join('')}
+          <hr>
+          <b class="d-flex justify-content-between">Tổng <span>${money(total())}</span></b>
+        </div>
+      </aside>
+    </div>`);
+
+  // Khi bấm "Đặt hàng"
+  $('#of').on('submit', function (e) {
+    e.preventDefault();   // chặn form tải lại trang
+
+    // Kiểm tra từng ô: true là hợp lệ
+    const v = {
+      n: $('#n').val().trim().length >= 2,
+      t: /^0\d{9}$/.test($('#t').val().trim()),   // 10 số, bắt đầu bằng 0
+      d: $('#d').val().trim().length >= 8
+    };
+
+    // Ô nào sai thì tô viền đỏ và hiện dòng báo lỗi (Bootstrap xử lý lớp is-invalid)
+    Object.keys(v).forEach(k => $('#' + k).toggleClass('is-invalid', !v[k]));
+    if (!(v.n && v.t && v.d)) return;   // còn ô sai thì dừng
+
+    // Tạo đơn hàng
+    const order = {
+      id: 'DH' + Date.now().toString().slice(-6),
+      name: $('#n').val().trim(),
+      phone: $('#t').val().trim(),
+      address: $('#d').val().trim(),
+      note: $('#g').val().trim(),
+      pay: $('[name=pay]:checked').val(),
+      date: new Date().toLocaleString('vi-VN'),
+      total: total(),
+      status: 'Chờ xác nhận',
+      items: L.map(l => ({ name: l.p.name, size: l.size, qty: l.qty, price: l.p.price }))
+    };
+
+    // Lưu đơn vào danh sách đơn hàng (đơn mới nằm đầu), rồi xóa giỏ
+    const orders = JSON.parse(localStorage.getItem('orders')) || [];
+    orders.unshift(order);
+    localStorage.setItem('orders', JSON.stringify(orders));
+    localStorage.setItem('cart', '[]');
+    badge();
+
+    $('#app').html(`
+      <div class="text-center py-5">
+        <h1>Đặt hàng thành công</h1>
+        <p>Mã đơn của bạn: <b>${order.id}</b>. Cửa hàng sẽ gọi số ${esc(order.phone)} để xác nhận.</p>
+        <a href="index.html" class="btn btn-main">Tiếp tục mua sắm</a>
+      </div>`);
+  });
+}
 // ===== Khởi chạy =====
 $(function () {
   layout();
@@ -345,4 +443,5 @@ $(function () {
   if (page === 'products') productsPage();
   if (page === 'detail') detailPage();
   if (page === 'cart') cartPage();
+  if (page === 'checkout') checkoutPage();
 });
