@@ -101,10 +101,81 @@ function home() {
     <div class="row g-3">${ps.filter(p => p.hot).slice(0, 4).map(card).join('')}</div>`);
 }
 
+// ===== PHẦN 4: Trang danh mục =====
+function productsPage() {
+  // Đọc tham số trên địa chỉ, ví dụ products.html?cat=gym&q=áo
+  const q = new URLSearchParams(location.search);
 
+  // Gom tất cả kích cỡ đang có để làm danh sách chọn (loại trùng bằng Set)
+  const sizes = [...new Set(products().flatMap(p => p.sizes))];
+
+  // Vẽ khung trang: cột bộ lọc bên trái, lưới sản phẩm bên phải
+  $('#app').html(`
+    <div class="row">
+      <aside class="col-md-3 mb-3">
+        <form id="f" class="card p-3">
+          <h2 class="h5">Bộ lọc</h2>
+
+          <label class="form-label">Từ khóa</label>
+          <input id="fq" class="form-control mb-3" value="${esc(q.get('q') || '')}">
+
+          <label class="form-label">Môn thể thao</label>
+          <select id="fc" class="form-select mb-3">
+            <option value="">Tất cả</option>
+            ${CATS.map(c => `<option value="${c.id}" ${q.get('cat') === c.id ? 'selected' : ''}>${c.name}</option>`).join('')}
+          </select>
+
+          <label class="form-label">Khoảng giá</label>
+          <select id="fp" class="form-select mb-3">
+            <option value="">Tất cả</option>
+            <option value="0-300000">Dưới 300.000₫</option>
+            <option value="300000-700000">300.000₫ – 700.000₫</option>
+            <option value="700000-999999999">Trên 700.000₫</option>
+          </select>
+
+          <label class="form-label">Kích cỡ</label>
+          <select id="fs" class="form-select">
+            <option value="">Tất cả</option>
+            ${sizes.map(s => `<option>${s}</option>`).join('')}
+          </select>
+        </form>
+      </aside>
+
+      <section class="col-md-9">
+        <p id="cnt" class="text-muted"></p>
+        <div id="grid" class="row g-3"></div>
+      </section>
+    </div>`);
+
+  // Lọc dữ liệu theo các ô đang chọn rồi vẽ lại lưới sản phẩm
+  const draw = () => {
+    const k = $('#fq').val().trim().toLowerCase();   // từ khóa
+    const c = $('#fc').val();                        // môn
+    const [lo, hi] = ($('#fp').val() || '0-999999999').split('-').map(Number);  // giá thấp, giá cao
+    const s = $('#fs').val();                        // kích cỡ
+
+    const result = products().filter(p =>
+      (!k || p.name.toLowerCase().includes(k)) &&
+      (!c || p.cat === c) &&
+      p.price >= lo && p.price <= hi &&
+      (!s || p.sizes.includes(s))
+    );
+
+    $('#cnt').text(result.length + ' sản phẩm');
+    $('#grid').html(
+      result.map(card).join('') ||
+      '<p>Không có sản phẩm phù hợp. Hãy thử bỏ bớt bộ lọc.</p>'
+    );
+  };
+
+  // Mỗi lần người dùng gõ hoặc chọn là lọc lại ngay; chặn form tải lại trang
+  $('#f').on('input change', draw).on('submit', e => e.preventDefault());
+  draw();   // vẽ lần đầu
+}
 // ===== Khởi chạy =====
 $(function () {
   layout();
   const page = document.body.dataset.page;
   if (page === 'home') home();
+  if (page === 'products') productsPage();
 });
