@@ -444,6 +444,7 @@ function checkoutPage() {
   });
 }
 // ===== PHẦN 8: Trang quản trị =====
+// ===== PHẦN 8: Trang quản trị =====
 const STATUS = ['Chờ xác nhận', 'Đã xác nhận', 'Đang giao', 'Đã giao'];
 
 function adminPage() {
@@ -452,9 +453,40 @@ function adminPage() {
   const saveProducts = ps => localStorage.setItem('products', JSON.stringify(ps));
   const saveOrders = os => localStorage.setItem('orders', JSON.stringify(os));
 
-  // Vẽ lại hai bảng: sản phẩm và đơn hàng
+  // Chuyển giữa các mục của menu bên trái: ẩn hết, chỉ hiện mục được chọn
+  const show = v => {
+    $('.view').addClass('d-none');
+    $('#v-' + v).removeClass('d-none');
+    $('#adm-nav button').removeClass('active').filter('[data-view=' + v + ']').addClass('active');
+  };
+  $('#adm-nav').on('click', 'button', function () { show($(this).data('view')); });
+
+  // Vẽ lại toàn bộ dữ liệu: tổng quan, bảng sản phẩm, bảng đơn hàng
   const draw = () => {
-    $('#tp').html(products().map(p => `
+    const ps = products(), os = getOrders();
+
+    // --- Tổng quan: 4 ô số liệu ---
+    const stats = [
+      ['Sản phẩm', ps.length],
+      ['Đơn hàng', os.length],
+      ['Chờ xác nhận', os.filter(o => o.status === 'Chờ xác nhận').length],
+      ['Doanh thu', money(os.reduce((s, o) => s + o.total, 0))]
+    ];
+    $('#stats').html(stats.map(s => `
+      <div class="col-6 col-lg-3">
+        <div class="card stat p-3">
+          <small class="text-muted">${s[0]}</small>
+          <div class="h3 mb-0">${s[1]}</div>
+        </div>
+      </div>`).join(''));
+
+    // --- Tổng quan: 5 đơn gần nhất (đơn mới luôn nằm đầu danh sách) ---
+    $('#recent').html(os.slice(0, 5).map(o => `
+      <tr><td>${o.id}</td><td>${esc(o.name)}</td><td>${money(o.total)}</td><td>${o.status}</td></tr>`).join('')
+      || '<tr><td colspan="4">Chưa có đơn hàng nào.</td></tr>');
+
+    // --- Bảng sản phẩm ---
+    $('#tp').html(ps.map(p => `
       <tr>
         <td>${p.icon}</td>
         <td>${esc(p.name)}</td>
@@ -466,7 +498,8 @@ function adminPage() {
         </td>
       </tr>`).join(''));
 
-    $('#to').html(getOrders().map((o, i) => `
+    // --- Bảng đơn hàng ---
+    $('#to').html(os.map((o, i) => `
       <tr>
         <td>${o.id}<br><small>${o.date}</small></td>
         <td>${esc(o.name)}<br><small>${esc(o.phone)}</small></td>
@@ -483,14 +516,14 @@ function adminPage() {
   // Đổ danh mục vào ô chọn môn trong form
   $('#pc').html(CATS.map(c => `<option value="${c.id}">${c.name}</option>`).join(''));
 
-  // Nút "Thêm sản phẩm mới": xóa trắng form (pid rỗng nghĩa là đang thêm mới)
+  // Thêm sản phẩm mới: xóa trắng form (pid rỗng nghĩa là đang thêm mới)
   $('#addp').click(() => {
     $('#pf')[0].reset();
     $('#pid').val('');
     modal.show();
   });
 
-  // Nút Sửa: điền thông tin sản phẩm vào form; nút Xóa: hỏi lại rồi xóa
+  // Sửa: điền thông tin vào form. Xóa: hỏi lại rồi xóa
   $('#tp')
     .on('click', '.ed', function () {
       const p = products().find(x => x.id == $(this).data('id'));
@@ -530,9 +563,9 @@ function adminPage() {
     }
 
     if (id) {
-      Object.assign(ps.find(x => x.id == id), d, { icon: CAT(cat).icon });   // sửa
+      Object.assign(ps.find(x => x.id == id), d, { icon: CAT(cat).icon });
     } else {
-      ps.push({                                                              // thêm mới
+      ps.push({
         ...d,
         id: Math.max(0, ...ps.map(x => x.id)) + 1,
         icon: CAT(cat).icon,
@@ -548,11 +581,12 @@ function adminPage() {
     toast('Đã lưu sản phẩm');
   });
 
-  // Đổi trạng thái đơn hàng
+  // Đổi trạng thái đơn hàng, vẽ lại để ô "Chờ xác nhận" ở Tổng quan cập nhật theo
   $('#to').on('change', '.st', function () {
     const os = getOrders();
     os[$(this).data('i')].status = $(this).val();
     saveOrders(os);
+    draw();
     toast('Đã cập nhật trạng thái');
   });
 
