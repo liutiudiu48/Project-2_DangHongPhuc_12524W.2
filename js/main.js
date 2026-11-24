@@ -1,6 +1,14 @@
 // ===== PHẦN 1: Hàm dùng chung =====
 const money = n => Number(n).toLocaleString('vi-VN') + '₫';
-const products = () => PRODUCTS;   // bước 8 sẽ nâng cấp để đọc từ localStorage
+// Lấy danh sách sản phẩm từ localStorage; lần đầu chưa có thì nạp dữ liệu mẫu
+const products = () => {
+  let p = JSON.parse(localStorage.getItem('products'));
+  if (!p) {
+    p = PRODUCTS;
+    localStorage.setItem('products', JSON.stringify(p));
+  }
+  return p;
+};
 const cart = () => JSON.parse(localStorage.getItem('cart')) || [];
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const CAT = id => CATS.find(c => c.id === id) || { name: '', icon: '🏅' };
@@ -22,7 +30,7 @@ const card = p => `
   </div>`;
 
 // Cập nhật số lượng trên biểu tượng giỏ hàng
-const badge = () => $('#cart-count').text(cart().reduce((s, i) => s + i.qty, 0));
+const badge = () => $('#cart-count').text(lines().reduce((s, l) => s + l.qty, 0));
 // Ghép dữ liệu giỏ hàng với thông tin sản phẩm (tên, giá lấy từ PRODUCTS)
 // k = vị trí của dòng trong giỏ, dùng để biết đang sửa dòng nào
 const lines = () => cart()
@@ -105,7 +113,7 @@ function home() {
     </div>
 
     <h2>Sản phẩm mới về</h2>
-    <div class="row g-3 mb-4">${ps.filter(p => p.isNew).slice(0, 4).map(card).join('')}</div>
+    <div class="row g-3 mb-4">${ps.filter(p => p.isNew).slice(-4).reverse().map(card).join('')}</div>
 
     <h2>Bán chạy nhất</h2>
     <div class="row g-3">${ps.filter(p => p.hot).slice(0, 4).map(card).join('')}</div>`);
@@ -435,6 +443,129 @@ function checkoutPage() {
       </div>`);
   });
 }
+// ===== PHẦN 8: Trang quản trị =====
+const STATUS = ['Chờ xác nhận', 'Đã xác nhận', 'Đang giao', 'Đã giao'];
+
+function adminPage() {
+  const modal = new bootstrap.Modal('#pmod');
+  const getOrders = () => JSON.parse(localStorage.getItem('orders')) || [];
+  const saveProducts = ps => localStorage.setItem('products', JSON.stringify(ps));
+  const saveOrders = os => localStorage.setItem('orders', JSON.stringify(os));
+
+  // Vẽ lại hai bảng: sản phẩm và đơn hàng
+  const draw = () => {
+    $('#tp').html(products().map(p => `
+      <tr>
+        <td>${p.icon}</td>
+        <td>${esc(p.name)}</td>
+        <td>${CAT(p.cat).name}</td>
+        <td>${money(p.price)}</td>
+        <td class="text-nowrap">
+          <button class="btn btn-sm btn-outline-dark ed" data-id="${p.id}">Sửa</button>
+          <button class="btn btn-sm btn-outline-danger rm" data-id="${p.id}">Xóa</button>
+        </td>
+      </tr>`).join(''));
+
+    $('#to').html(getOrders().map((o, i) => `
+      <tr>
+        <td>${o.id}<br><small>${o.date}</small></td>
+        <td>${esc(o.name)}<br><small>${esc(o.phone)}</small></td>
+        <td>${o.items.map(x => esc(x.name) + ' (' + x.size + ') ×' + x.qty).join('<br>')}</td>
+        <td>${money(o.total)}</td>
+        <td>
+          <select class="form-select form-select-sm st" data-i="${i}">
+            ${STATUS.map(s => `<option ${s === o.status ? 'selected' : ''}>${s}</option>`).join('')}
+          </select>
+        </td>
+      </tr>`).join('') || '<tr><td colspan="5">Chưa có đơn hàng nào.</td></tr>');
+  };
+
+  // Đổ danh mục vào ô chọn môn trong form
+  $('#pc').html(CATS.map(c => `<option value="${c.id}">${c.name}</option>`).join(''));
+
+  // Nút "Thêm sản phẩm mới": xóa trắng form (pid rỗng nghĩa là đang thêm mới)
+  $('#addp').click(() => {
+    $('#pf')[0].reset();
+    $('#pid').val('');
+    modal.show();
+  });
+
+  // Nút Sửa: điền thông tin sản phẩm vào form; nút Xóa: hỏi lại rồi xóa
+  $('#tp')
+    .on('click', '.ed', function () {
+      const p = products().find(x => x.id == $(this).data('id'));
+      $('#pid').val(p.id);
+      $('#pn').val(p.name);
+      $('#pc').val(p.cat);
+      $('#pp').val(p.price);
+      $('#pmat').val(p.material);
+      $('#ps').val(p.sizes.join(','));
+      $('#pd').val(p.desc);
+      modal.show();
+    })
+    .on('click', '.rm', function () {
+      if (!confirm('Xóa sản phẩm này?')) return;
+      saveProducts(products().filter(x => x.id != $(this).data('id')));
+      draw();
+    });
+
+  // Lưu form: có pid là sửa, không có là thêm mới
+  $('#pf').on('submit', e => {
+    e.preventDefault();
+    const ps = products();
+    const id = $('#pid').val();
+    const cat = $('#pc').val();
+    const d = {
+      name: $('#pn').val().trim(),
+      cat,
+      price: +$('#pp').val(),
+      material: $('#pmat').val().trim(),
+      desc: $('#pd').val().trim(),
+      sizes: $('#ps').val().split(',').map(s => s.trim()).filter(Boolean)
+    };
+
+    if (!d.name || !(d.price > 0) || !d.sizes.length) {
+      toast('Nhập tên, giá lớn hơn 0 và ít nhất một size');
+      return;
+    }
+
+    if (id) {
+      Object.assign(ps.find(x => x.id == id), d, { icon: CAT(cat).icon });   // sửa
+    } else {
+      ps.push({                                                              // thêm mới
+        ...d,
+        id: Math.max(0, ...ps.map(x => x.id)) + 1,
+        icon: CAT(cat).icon,
+        color: '#dfe6f5',
+        isNew: true,
+        hot: false
+      });
+    }
+
+    saveProducts(ps);
+    modal.hide();
+    draw();
+    toast('Đã lưu sản phẩm');
+  });
+
+  // Đổi trạng thái đơn hàng
+  $('#to').on('change', '.st', function () {
+    const os = getOrders();
+    os[$(this).data('i')].status = $(this).val();
+    saveOrders(os);
+    toast('Đã cập nhật trạng thái');
+  });
+
+  // Khôi phục dữ liệu mẫu
+  $('#reset').click(() => {
+    if (confirm('Khôi phục dữ liệu sản phẩm mẫu?')) {
+      localStorage.removeItem('products');
+      draw();
+    }
+  });
+
+  draw();
+}
 // ===== Khởi chạy =====
 $(function () {
   layout();
@@ -444,4 +575,5 @@ $(function () {
   if (page === 'detail') detailPage();
   if (page === 'cart') cartPage();
   if (page === 'checkout') checkoutPage();
+  if (page === 'admin') adminPage();
 });
